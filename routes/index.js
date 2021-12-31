@@ -6,7 +6,9 @@ var ensureLoggedIn = require('connect-ensure-login').ensureLoggedIn;
 var db = require('../db');
 var router = express.Router();
 const isTeamSupervisor = require('./authMiddleware').isTeamSupervisor;
-// const isAdmin = require('./authMiddleware').isAdmin;
+
+var CONSTANT = require('../const');
+var TEAM = CONSTANT.TEAM;
 
 /* GET users listing. */
 
@@ -15,7 +17,6 @@ router.post("/api/login", (req, res, next) => {
     if (err) {
       return next(err);
     }
-    console.log( "abc")
 
     if (!user) {
       return res.status(400).send([user, "Cannot log in", info])
@@ -28,7 +29,7 @@ router.post("/api/login", (req, res, next) => {
 });
 
 router.post('/api/register', function (req, res, next) {
-  var salt = crypto.randomBytes(16);
+  var salt = crypto.randomBytes(16); //todo remove confirm password from db, 2. add check confirm password against password logic
   crypto.pbkdf2(req.body.password, salt, 310000, 32, 'sha256', function (err, hashedPassword) {
     if (err) { return next(err); }
     crypto.pbkdf2(req.body.confirm_password, salt, 310000, 32, 'sha256', function (err, hashedConfirmPassword) {
@@ -37,7 +38,7 @@ router.post('/api/register', function (req, res, next) {
       db.run('INSERT INTO user (username,name,role,password,confirm_password,salt) VALUES (?, ?, ?, ?, ?, ?)', [
         req.body.username,
         req.body.name,
-        req.body.role,
+        req.body.role == "Admin" ? 1 : 0,
         hashedPassword,
         hashedConfirmPassword,
         salt
@@ -48,12 +49,11 @@ router.post('/api/register', function (req, res, next) {
           id: this.lastID.toString(),
           username: req.body.username,
           displayName: req.body.name,
-          role: req.body.role
+          role: req.body.role == "Admin" ? 1 : 0 //change to enum at both end
         };
         req.login(user, function (err) {
           if (err) { return next(err); }
           res.send("Register Done")
-          // res.redirect('/');
         });
       });
     });
@@ -61,11 +61,16 @@ router.post('/api/register', function (req, res, next) {
 });
 
 router.post('/api/registeremployee', function (req, res, next) {
-  db.run('INSERT INTO employee (employeename,employeeid) VALUES (?, ?)', [
-    req.body.username,
-    req.body.workerid,
+
+  db.run('INSERT INTO employee (employeename, userid) VALUES (?, ?)', [
+    req.body.nickname,
+    req.body.userid
   ], function (err) {
-    if (err) { return next(err); }
+    if (err) {
+      console.log('/api/registeremployee', err)
+      return res.sendStatus(500)
+    }
+    res.sendStatus(200)
   });
 });
 
@@ -83,40 +88,39 @@ router.post('/api/registerproject', function (req, res, next) {
     req.login(project, function (err) {
       if (err) { return next(err); }
       res.send("Register Project Done")
-      // res.redirect('/');
     });
   });
 });
 
 router.post('/api/assignproject', function (req, res, next) {
-  db.all("SELECT teamid FROM team ORDER BY teamid ASC", function (err, res) {
-    console.log(req.body)
-    var i = res.length - 1;
-    if (err) { console.log(err) }
-    console.log(res.length)
-    if (res == '') {
-      var teamid = res + 1;
-    } else {
-      var teamid = parseInt(JSON.stringify(res[i].teamid)) + 1;
-    }
-    db.run('INSERT INTO team (teamname,description,projectid) VALUES (?, ?, ?)', [
-      req.body.team,
-      req.body.team,
-      req.body.projectid,
-    ], function (err) {
-      if (err) { return next(err); } else {
-        for (let i = 0; i < req.body.workerid.length; i++) {
-          db.run('INSERT INTO team_member (teamid,roleid,employeeid,projectid) VALUES (?, 3, ?, ?)', [
-            teamid,
-            req.body.workerid[i],
-            req.body.projectid
-          ], function (err) {
-            if (err) { return next(err); }
-          });
-        }
+  // db.all("SELECT teamid FROM team ORDER BY teamid ASC", function (err, res) {
+  //   console.log(req.body)
+  //   var i = res.length - 1;
+  //   if (err) { console.log(err) }
+  //   console.log(res.length)
+  //   if (res == '') {
+  //     var teamid = res + 1;
+  //   } else {
+  //     var teamid = parseInt(JSON.stringify(res[i].teamid)) + 1;
+  //   }
+  db.run('INSERT INTO team (teamname,description,projectid) VALUES (?, ?, ?)', [
+    req.body.team,
+    req.body.team,
+    req.body.projectid,
+  ], function (err) {
+    if (err) { return next(err); } else {
+      for (let i = 0; i < req.body.workerid.length; i++) {
+        db.run('INSERT INTO team_member (teamid,roleid,employeeid,projectid) VALUES (?, 3, ?, ?)', [
+          teamid,
+          req.body.workerid[i],
+          req.body.projectid
+        ], function (err) {
+          if (err) { return next(err); }
+        });
       }
-    });
+    }
   });
+  // });
 });
 
 router.post('/api/assignsupervisor', function (req, res, next) {
@@ -125,7 +129,10 @@ router.post('/api/assignsupervisor', function (req, res, next) {
     req.body.workerid,
   ], function (err) {
     if (err) { return next(err); }
+
+    res.sendStatus(200)
   });
+
 });
 // update team name
 router.post('/api/updateteamname', function (req, res, next) {
@@ -166,6 +173,7 @@ router.post('/api/updateteammember', function (req, res, next) {
 });
 
 router.post('/api/insertworkertime', function (req, res, next) {
+  console.log("insert worker timesheet", req.body.workerid)
   for (let i = 0; i < req.body.workerid.length; i++) {
     //console.log(req.body.workerid[i],)
     db.run('INSERT INTO worker_time (teamid,projectid,employeeid,datein,clockin,dateout,clockout) VALUES (?, ?, ?, ?, ?, ?, ?)', [
@@ -181,9 +189,8 @@ router.post('/api/insertworkertime', function (req, res, next) {
         // return res.send("Register Project Done"); 
       }
     });
-    res.json({ data: "Register Project Done" });
-    //res.end();
   }
+  res.json({ data: "Register Project Done" });;
 });
 
 router.post('/api/deleteteammember', function (req, res, next) {
@@ -209,13 +216,14 @@ router.post('/api/insertteammember', function (req, res, next) {
   console.log(req.body)
   for (let i = 0; i < req.body.workerid.length; i++) {
     console.log(req.body.workerid[i],)
-    db.run('INSERT INTO team_member (teamid,roleid,employeeid,projectid) VALUES (?, 3, ?, ?)', [
+    db.run('INSERT INTO team_member (teamid,roleid,employeeid,projectid) VALUES (?, ?, ?, ?)', [
       req.body.teamid,
+      TEAM.user,
       req.body.workerid[i],
       req.body.projectid,
     ], function (err) {
       if (err) {
-        console.log("error")
+        console.log("error", err)
         return next(err);
       }
     });
@@ -257,30 +265,13 @@ router.post('/api/insertteamsupervisor', function (req, res, next) {
   }
 });
 
-/* GET users listing. */
 router.get('/api/user',
-  // ensureLoggedIn(),
   function (req, res, next) {
-    console.log(req.user)
-    db.get('SELECT rowid AS id, username, name, role FROM user WHERE rowid = ?', [req.user.id], function (err, row) {
-      if (err) {
-        console.log(err)
-        return next(err);
-      }
-      if (req.user.role == 1) {
-        var role = "admin"
-      } else {
-        var role = "user"
-      }
-      var user = {
-        id: row.id.toString(),
-        username: row.username,
-        displayName: row.name,
-        role: role
-      };
-      res.send({ user: user });
+    if (!req.user) {
+      return res.sendStatus(401);
+    }
 
-    });
+    res.send({ user: req.user });
   });
 
 router.get('/api/supervisor',
@@ -291,12 +282,44 @@ router.get('/api/supervisor',
         console.log(err)
         return next(err);
       }
-      console.log(row)
+      console.log("/api/supervisor ", row)
       res.json(row)
     });
   });
 
-  router.get('/api/supervisorandteam',
+router.get('/api/getTeam',
+  ensureLoggedIn(), isTeamSupervisor,
+  function (req, res, next) {
+    db.all(`
+    select
+      team.teamid as id,
+      team.teamname,
+      team.description,
+      project.projectname,
+      user.userid,
+      employee.employeeid,
+      team_member.roleid
+    FROM
+      team_member
+        LEFT JOIN team ON team.teamid = team_member.teamid
+        LEFT JOIN project ON project.projectid = team.projectid
+        LEFT JOIN employee on employee.employeeid = team_member.employeeid
+        LEFT JOIN user ON user.userid = employee.userid
+    WHERE
+      team_member.roleid = 1
+        AND user.userid = ?
+    `, [req.user.id], function (err, rows) {
+      if (err) {
+        console.log(err)
+        return next(err);
+      }
+
+      console.log("/api/supervisor ", rows)
+      res.json(rows)
+    });
+  });
+
+router.get('/api/supervisorandteam',
   ensureLoggedIn(), isTeamSupervisor,
   function (req, res, next) {
     db.all('SELECT teamid FROM user Natural JOIN employee Natural JOIN team_member where roleid = 1  ', [req.user.id], function (err, row) {
@@ -310,9 +333,9 @@ router.get('/api/supervisor',
   });
 
 router.get('/api/reportlist',
-  ensureLoggedIn(), 
+  ensureLoggedIn(),
   function (req, res, next) {
-    db.all('SELECT * FROM worker_time Natural JOIN employee Natural JOIN project natural join team WHERE datein = "2021-12-30" order by projectname ASC, teamname ASC, datein ASC, clockin ASC ', function (err, row) {
+    db.all('SELECT * FROM worker_time Natural JOIN employee Natural JOIN project natural join team WHERE datein = DATE("now") order by projectname ASC, teamname ASC, datein ASC, clockin ASC ', function (err, row) {
       if (err) {
         console.log(err)
         return next(err);
@@ -358,12 +381,11 @@ router.get('/api/projectname', function (req, res, next) {
 
 router.get('/api/workername', function (req, res, next) {
   //console.log(req.user)
-  db.all('SELECT * FROM user where role == 0', function (err, row) {
+  db.all('SELECT userid, name FROM user where role == 0', function (err, row) {
     if (err) {
       console.log(err)
       return next(err);
     }
-    //console.log(row)
     res.json(row)
 
   });

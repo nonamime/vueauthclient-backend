@@ -2,6 +2,8 @@ var passport = require('passport');
 var Strategy = require('passport-local');
 var crypto = require('crypto');
 var db = require('../db');
+var CONSTANT = require('../const');
+var ROLE = CONSTANT.ROLE;
 
 
 module.exports = function () {
@@ -12,44 +14,45 @@ module.exports = function () {
   // (`username` and `password`) submitted by the user.  The function must verify
   // that the password is correct and then invoke `cb` with a user object, which
   // will be set at `req.user` in route handlers after authentication.
-  passport.use(new Strategy(function (username, password, cb) {
-    db.get('SELECT rowid AS id, * FROM user WHERE username = ?', [username], function (err, row) {
-      if (err) { return cb(err); }
-      if (!row) { return cb(null, false, { message: 'Incorrect username or password.' }); }
+  passport.use(new Strategy(function (username, password, done) {
 
+    db.get('SELECT rowid AS id, username, role, name, password as dbHashedPassword, salt FROM user WHERE username = ?', [username], function (err, row) {
+      if (err) { return done(err) }
+      if (!row) { return done(null, false, { message: 'Incorrect username or password.' }) }
 
-      console.log(row)
       crypto.pbkdf2(password, row.salt, 310000, 32, 'sha256', function (err, hashedPassword) {
-        if (err) { return cb(err); }
-        if (!crypto.timingSafeEqual(row.password, hashedPassword)) {
-          return cb(null, false, { message: 'Incorrect username or password.' });
+        if (err) { return done(err); }
+        if (!crypto.timingSafeEqual(row.dbHashedPassword, hashedPassword)) {
+          return done(null, false, { message: 'Incorrect username or password.' })
         }
 
-        if (row.role == "Admin") { //admin
-
+        if (row.role == 1) { //admin
           var user = {
             id: row.id.toString(),
             username: row.username,
-            displayName: row.name,
-            //role: row.role,
-            role: 1,
-            teamrole: 0
+            name: row.name,
+            // role: row.role,
+            role: ROLE.admin, // 1 = admin , 0 = normal user
+            teamrole: 0,
           };
+          return done(null, user)
 
         } else {
+          //assign supervisor to a team when register if not teammember.roleid will be undefine value
+          //db.all('select employee.employeeid,team_member.roleid FROM user JOIN employee ON user.userid = employee.userid JOIN team_member ON employee.employeeid = team_member.employeeid  WHERE employee.userid = ? order by roleid asc', [row.id], function (err, rows) {
+          db.get('select count(1) as count FROM user JOIN employee ON user.userid = employee.userid JOIN team_member ON employee.employeeid = team_member.employeeid  WHERE team_member.roleid = 1 and  user.userid = ?', [row.id], function (err, supvisorCount) {
 
-          db.get('select employee.employeeid,team_member.roleid FROM user JOIN employee ON user.userid = employee.userid JOIN team_member ON employee.employeeid = team_member.employeeid  WHERE employee.employeeid = ? order by roleid asc', [row.id], function (err, res) {
             var user = {
               id: row.id.toString(),
               username: row.username,
-              displayName: row.name,
-              role: row.role,
-              teamrole: res.roleid
+              name: row.name,
+              role: ROLE.user,
+              teamrole: supvisorCount.count > 0 ? 1 : 3,//check Role table for reference,
             };
+
+            return done(null, user)
           });
         }
-
-        return cb(null, user);
       });
     });
   }));
@@ -62,15 +65,15 @@ module.exports = function () {
   // typical implementation of this is as simple as supplying the user ID when
   // serializing, and querying the user record by ID from the database when
   // deserializing.
-  passport.serializeUser(function (user, cb) {
+  passport.serializeUser(function (user, done) {
     process.nextTick(function () {
-      cb(null, { id: user.id, username: user.username, role: user.role, teamrole: user.teamrole });
+      done(null, user);
     });
   });
 
-  passport.deserializeUser(function (user, cb) {
+  passport.deserializeUser(function (user, done) {
     process.nextTick(function () {
-      return cb(null, user);
+      return done(null, user);
     });
   });
 
