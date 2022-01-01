@@ -93,25 +93,20 @@ router.post('/api/registerproject', function (req, res, next) {
 });
 
 router.post('/api/assignproject', function (req, res, next) {
-  // db.all("SELECT teamid FROM team ORDER BY teamid ASC", function (err, res) {
-  //   console.log(req.body)
-  //   var i = res.length - 1;
-  //   if (err) { console.log(err) }
-  //   console.log(res.length)
-  //   if (res == '') {
-  //     var teamid = res + 1;
-  //   } else {
-  //     var teamid = parseInt(JSON.stringify(res[i].teamid)) + 1;
-  //   }
-  db.run('INSERT INTO team (teamname,description,projectid) VALUES (?, ?, ?)', [
+  db.run('INSERT INTO team (teamname, description, projectid) VALUES (?, ?, ?)', [
     req.body.team,
     req.body.team,
     req.body.projectid,
   ], function (err) {
-    if (err) { return next(err); } else {
+    if (err) {
+      return next(err);
+    } else {
+      const teamid = this.lastID
+      console.log("---------------", teamid, req.body.workerid)
       for (let i = 0; i < req.body.workerid.length; i++) {
-        db.run('INSERT INTO team_member (teamid,roleid,employeeid,projectid) VALUES (?, 3, ?, ?)', [
+        db.run('INSERT INTO team_member (teamid, roleid, employeeid, projectid) VALUES (?, ?, ?, ?)', [
           teamid,
+          TEAM.user,
           req.body.workerid[i],
           req.body.projectid
         ], function (err) {
@@ -119,8 +114,8 @@ router.post('/api/assignproject', function (req, res, next) {
         });
       }
     }
+    res.sendStatus(200);
   });
-  // });
 });
 
 router.post('/api/assignsupervisor', function (req, res, next) {
@@ -370,6 +365,7 @@ router.get('/api/user1',
 router.get('/api/projectname', function (req, res, next) {
   //console.log(req.user)
   db.all("SELECT * FROM project", function (err, row) {
+
     if (err) {
       console.log(err)
       return next(err);
@@ -393,7 +389,7 @@ router.get('/api/workername', function (req, res, next) {
 
 router.get('/api/employeename', function (req, res, next) {
   //console.log(req.user)
-  db.all('SELECT * FROM employee', function (err, row) {
+  db.all('SELECT employee.employeeid, employee.employeename, user.userid, user.name FROM employee left join user on employee.userid = user.userid where employee.userid IS NOT NULL', function (err, row) {
     if (err) {
       console.log(err)
       return next(err);
@@ -444,14 +440,35 @@ router.post('/api/teamsupervisor', function (req, res, next) {
 
 router.post('/api/filterteamworker', function (req, res, next) {
   // console.log(req.body.projectid)
-  db.all('select employee.employeename,employee.employeeid,team_member.teamid,project.projectname,team.teamname,team.description,team.projectid, employee.employeeid FROM TEAM JOIN project ON team.projectid = project.projectid JOIN team_member ON team_member.projectid = project.projectid JOIN employee ON team_member.employeeid = employee.employeeid WHERE team.teamid = ? ORDER BY employee.employeeid ASC', [req.body.teamid], function (err, row) {
-    if (err) {
-      console.log(err)
-      return next(err);
-    }
-    console.log(row)
-    res.json(row)
-  });
+  db.all(`
+    SELECT
+      employee.employeename,
+      employee.employeeid,
+      team_member.teamid,
+      project.projectname,
+      team.teamname,
+      team.description,
+      team.projectid,
+      employee.employeeid
+    FROM
+      TEAM
+      LEFT JOIN project ON team.projectid = project.projectid
+      LEFT JOIN team_member ON team_member.teamid = team.teamid
+      JOIN employee ON team_member.employeeid = employee.employeeid
+    WHERE
+      team.teamid = ?
+    ORDER BY
+      employee.employeeid ASC
+    `,
+    [req.body.teamid],
+    function (err, row) {
+      if (err) {
+        console.log(err)
+        return next(err);
+      }
+      console.log(row)
+      res.json(row)
+    });
 });
 
 router.post('/api/getworkerdata', function (req, res, next) {
