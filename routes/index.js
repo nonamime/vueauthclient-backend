@@ -45,16 +45,7 @@ router.post('/api/register', function (req, res, next) {
       ], function (err) {
         if (err) { return next(err); }
 
-        var user = {
-          id: this.lastID.toString(),
-          username: req.body.username,
-          displayName: req.body.name,
-          role: req.body.role == "Admin" ? 1 : 0 //change to enum at both end
-        };
-        req.login(user, function (err) {
-          if (err) { return next(err); }
-          res.send("Register Done")
-        });
+        res.sendStatus(200)
       });
     });
   });
