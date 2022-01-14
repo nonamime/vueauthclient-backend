@@ -405,19 +405,96 @@ router.get(
   }
 );
 
-router.get("/api/reportlist", ensureLoggedIn(), function (req, res, next) {
-  db.all(
-    'SELECT * FROM worker_time Natural JOIN employee Natural JOIN project natural join team WHERE datein = DATE("now") order by projectname ASC, teamname ASC, datein ASC, clockin ASC ',
-    function (err, row) {
-      if (err) {
-        console.log(err);
-        return next(err);
-      }
-      console.log(row);
-      res.json(row);
+router.post(
+  "/api/reportlist",
+  ensureLoggedIn(),
+  async function (req, res, next) {
+    const localDate = new Date(
+      new Date().getTime() - new Date().getTimezoneOffset() * 60 * 1000
+    )
+      .toJSON()
+      .split("T")[0];
+    const dateParam = req.body.date ? req.body.date : localDate;
+    console.log(dateParam);
+
+    //admin
+    if (req.user.role == CONSTANT.ROLE.admin) {
+      const rows = await awaitDb.all(
+        `SELECT
+        *
+        FROM
+            worker_time Natural
+            JOIN employee Natural
+            JOIN project natural
+            JOIN team
+        WHERE
+            (worker_time.datein = ? OR worker_time.dateout = ? )
+            AND (worker_time.remark IS NULL OR worker_time.remark = '') 
+        ORDER BY
+            projectname ASC,
+            teamname ASC,
+            datein ASC,
+            clockin ASC`,
+        [dateParam, dateParam]
+      );
+      console.log(rows);
+      res.json(rows);
+    } else {
+      //supervisor
+
+      var teamIds = await awaitDb.all(
+        `SELECT 
+          teamid AS id 
+        FROM 
+          team_member 
+        where team_member.employeeid = ? 
+          AND team_member.roleid = 1`,
+        req.user.employee_id
+      );
+
+      teamIds = teamIds.map((x) => x.id);
+
+      console.log(`SELECT
+      *
+      FROM
+          worker_time Natural
+          JOIN employee Natural
+          JOIN project Natural
+          JOIN team
+      WHERE
+          (worker_time.datein = ? OR worker_time.dateout = ? )
+          AND (worker_time.remark IS NULL OR worker_time.remark = '') 
+          AND (team.teamid in (${teamIds.map(() => "?").join(",")})) 
+      ORDER BY
+          projectname ASC,
+          teamname ASC,
+          datein ASC,
+          clockin ASC`);
+
+      const rows = await awaitDb.all(
+        `SELECT
+        *
+        FROM
+            worker_time Natural
+            JOIN employee Natural
+            JOIN project Natural
+            JOIN team
+        WHERE
+            (worker_time.datein = ? OR worker_time.dateout = ? )
+            AND (worker_time.remark IS NULL OR worker_time.remark = '') 
+            AND (team.teamid in (${teamIds.map(() => "?").join(",")})) 
+        ORDER BY
+            projectname ASC,
+            teamname ASC,
+            datein ASC,
+            clockin ASC`,
+        [dateParam, dateParam, ...teamIds]
+      );
+      console.log(rows);
+      res.json(rows);
     }
-  );
-});
+  }
+);
 
 router.get("/api/user1", ensureLoggedIn(), function (req, res, next) {
   //console.log(req.user)
@@ -604,7 +681,8 @@ router.get("/api/gettimesheetbysupervisor", function (req, res, next) {
       worker_time.datein,
       worker_time.clockin,
       worker_time.dateout,
-      worker_time.clockout
+      worker_time.clockout,
+      worker_time.remark
     FROM
         worker_time
         LEFT JOIN employee ON worker_time.employeeid = employee.employeeid
@@ -618,9 +696,9 @@ router.get("/api/gettimesheetbysupervisor", function (req, res, next) {
             return "?";
           })
           .join(",")})
-        AND worker_time.datein >= date('now')
+        AND (worker_time.dateout >= date('now') OR worker_time.datein >= date('now') )
     ORDER By 
-        worker_time.datein, project.projectname, team.teamname, employee.employeename
+        worker_time.remark NULLS FIRST, worker_time.datein, project.projectname, team.teamname, employee.employeename
     `,
         teamIds,
         function (err, row2) {
@@ -702,15 +780,15 @@ router.post("/api/edittimesheet", async function (req, res, next) {
     console.log(row);
     //insert new line
     await awaitDb.run(
-      "INSERT INTO worker_time (teamid,projectid,employeeid,datein,clockin,dateout,clockout, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO worker_time (teamid,projectid,employeeid,datein,clockin,dateout,clockout) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         row.teamid,
         row.projectid,
-        req.body.id,
+        row.employeeid,
         req.body.datein,
-        req.body.timein,
+        req.body.clockin,
         req.body.dateout,
-        req.body.timeout,
+        req.body.clockout,
       ]
     );
 
@@ -737,6 +815,21 @@ router.post("/api/edittimesheet", async function (req, res, next) {
     );
     res.sendStatus(200);
   }
+});
+
+router.post("/api/deletetimesheet", async function (req, res, next) {
+  await awaitDb.run(
+    `
+    UPDATE worker_time 
+    SET 
+      remark = ?
+    WHERE 
+      workertimeid = ?
+      `,
+    [req.body.remark, req.body.id]
+  );
+
+  res.sendStatus(200);
 });
 
 router.post("/api/batchupdateendtime", async function (req, res, next) {
