@@ -669,6 +669,12 @@ router.get("/api/gettimesheetbysupervisor", function (req, res, next) {
       }
       console.log("select timesheet from teams", teamIds);
 
+      const localDate = new Date(
+        new Date().getTime() - new Date().getTimezoneOffset() * 60 * 1000
+      )
+        .toJSON()
+        .split("T")[0];
+
       db.all(
         `
     SELECT
@@ -696,11 +702,11 @@ router.get("/api/gettimesheetbysupervisor", function (req, res, next) {
             return "?";
           })
           .join(",")})
-        AND (worker_time.dateout >= date('now') OR worker_time.datein >= date('now') )
+        AND (worker_time.dateout >= ? OR worker_time.datein >= ?)
     ORDER By 
         worker_time.remark NULLS FIRST, worker_time.datein, project.projectname, team.teamname, employee.employeename
     `,
-        teamIds,
+        [...teamIds, localDate, localDate],
         function (err, row2) {
           if (err) {
             console.log(err);
