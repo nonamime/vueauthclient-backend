@@ -1,3 +1,11 @@
-var sqlite3 = require('sqlite3');
+const sqlite3 = require("sqlite3");
+const { open } = require("sqlite");
 
-module.exports = new sqlite3.Database('newdb.sqlite3');
+const sqliteDbFilename = "newdb.sqlite3";
+
+module.exports = new sqlite3.Database(sqliteDbFilename);
+
+module.exports.awaitDb = open({
+  filename: sqliteDbFilename,
+  driver: sqlite3.Database,
+});

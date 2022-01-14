@@ -16,7 +16,7 @@ module.exports = function () {
   // will be set at `req.user` in route handlers after authentication.
   passport.use(new Strategy(function (username, password, done) {
 
-    db.get('SELECT rowid AS id, username, role, name, password as dbHashedPassword, salt FROM user WHERE username = ?', [username], function (err, row) {
+    db.get('SELECT user.userid AS id, username, role, name, password as dbHashedPassword, salt, employee.employeeid FROM user LEFT JOIN employee ON user.userid = employee.userid WHERE username = ?', [username], function (err, row) {
       if (err) { return done(err) }
       if (!row) { return done(null, false, { message: 'Incorrect username or password.' }) }
 
@@ -31,9 +31,9 @@ module.exports = function () {
             id: row.id.toString(),
             username: row.username,
             name: row.name,
-            // role: row.role,
             role: ROLE.admin, // 1 = admin , 0 = normal user
             teamrole: 0,
+            employee_id: row.employeeid
           };
           return done(null, user)
 
@@ -47,6 +47,7 @@ module.exports = function () {
               username: row.username,
               name: row.name,
               role: ROLE.user,
+              employee_id: row.employeeid,
               teamrole: supvisorCount.count > 0 ? 1 : 3,//check Role table for reference,
             };
 
