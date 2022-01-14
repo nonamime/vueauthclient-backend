@@ -578,7 +578,7 @@ router.get("/api/gettimesheetbysupervisor", function (req, res, next) {
       team_member.roleid = 1
       AND team_member.employeeid = ?
   `,
-    [req.user?.employee_id],
+    [req.user.employee_id],
     function (err, row) {
       if (err) {
         console.log(err);
