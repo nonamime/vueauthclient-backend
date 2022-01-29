@@ -9,6 +9,7 @@
   },
   "author": "",
   "license": "ISC",
+  "type": "module",
   "dependencies": {
     "body-parser": "^1.19.0",
     "connect-ensure-login": "^0.1.1",
@@ -16,6 +17,7 @@
     "cookie-session": "^1.4.0",
     "express": "^4.17.1",
     "express-session": "^1.16.1",
+    "linq": "^4.0.0",
     "mongodb": "^4.2.1",
     "morgan": "^1.9.1",
     "passport": "^0.5.0",

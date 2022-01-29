@@ -1,25 +1,32 @@
-var express = require("express");
-var passport = require("passport");
-var crypto = require("crypto");
-const LocalStrategy = require("passport-local").Strategy;
-var ensureLoggedIn = require("connect-ensure-login").ensureLoggedIn;
-var db = require("../db");
+import express from "express";
+import passport from "passport";
+
+import { ensureLoggedIn } from "connect-ensure-login";
+import crypto from "crypto";
+import { db, awaitDb as importAwaitDb } from "../db.js";
+import Enumerable from "linq";
+
+import { TEAM, ROLE } from "../const.js";
+
+let result = Enumerable.range(1, 10)
+  .where((i) => i % 3 == 0)
+  .select((i) => i * 10);
+console.log(result.toArray());
 
 var awaitDb;
 (async () => {
   try {
-    awaitDb = await db.awaitDb;
+    console.log("load db");
+    awaitDb = await importAwaitDb;
     console.log("loaded await db library");
-  } catch (e) {}
+  } catch (e) {
+    console.log(e);
+  }
 })();
 
 var router = express.Router();
-const isTeamSupervisor = require("./authMiddleware").isTeamSupervisor;
-
-var CONSTANT = require("../const");
-var TEAM = CONSTANT.TEAM;
-
-/* GET users listing. */
+// const isTeamSupervisor = require("./authMiddleware").isTeamSupervisor;
+import { isTeamSupervisor } from "./authMiddleware.js";
 
 router.post("/api/login", (req, res, next) => {
   passport.authenticate("local", (err, user, info) => {
@@ -418,7 +425,7 @@ router.post(
     console.log(dateParam);
 
     //admin
-    if (req.user.role == CONSTANT.ROLE.admin) {
+    if (req.user.role == ROLE.admin) {
       const rows = await awaitDb.all(
         `SELECT
         *
@@ -986,4 +993,6 @@ router.get("/api/logout", function (req, res, next) {
   res.send(req.user);
 });
 
-module.exports = router;
+// module.exports = router;
+
+export default router;

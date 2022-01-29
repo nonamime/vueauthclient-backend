@@ -1,7 +1,7 @@
 var db = require('../db');
 
 
-module.exports = function () {
+export default  db = function () {
 
   db.serialize(function () {
     db.run("CREATE TABLE IF NOT EXISTS user ( \
