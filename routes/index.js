@@ -8,11 +8,6 @@ import Enumerable from "linq";
 
 import { TEAM, ROLE } from "../const.js";
 
-let result = Enumerable.range(1, 10)
-  .where((i) => i % 3 == 0)
-  .select((i) => i * 10);
-console.log(result.toArray());
-
 var awaitDb;
 (async () => {
   try {
@@ -414,7 +409,7 @@ router.get(
 
 router.post(
   "/api/reportlist",
-  ensureLoggedIn(),
+  // ensureLoggedIn(),
   async function (req, res, next) {
     const localDate = new Date(
       new Date().getTime() - new Date().getTimezoneOffset() * 60 * 1000
@@ -422,10 +417,9 @@ router.post(
       .toJSON()
       .split("T")[0];
     const dateParam = req.body.date ? req.body.date : localDate;
-    console.log(dateParam);
 
     //admin
-    if (req.user.role == ROLE.admin) {
+    if (true || req.user.role == ROLE.admin) {
       const rows = await awaitDb.all(
         `SELECT
         *
@@ -441,12 +435,22 @@ router.post(
             projectname ASC,
             teamname ASC,
             datein ASC,
-            clockin ASC`,
+            clockin ASC,
+            dateout ASC,
+            clockout ASC`,
         [dateParam, dateParam]
       );
-      console.log(rows);
+
+      if (req.body.whatsapp == "true") {
+        console.log("whatsapp")
+
+        const groupByArrary = whatsappVersion(rows)
+        return res.json(groupByArrary)
+      }
+      console.log("normal call")
       res.json(rows);
-    } else {
+    }
+    else {
       //supervisor
 
       var teamIds = await awaitDb.all(
@@ -460,23 +464,6 @@ router.post(
       );
 
       teamIds = teamIds.map((x) => x.id);
-
-      console.log(`SELECT
-      *
-      FROM
-          worker_time Natural
-          JOIN employee Natural
-          JOIN project Natural
-          JOIN team
-      WHERE
-          (worker_time.datein = ? OR worker_time.dateout = ? )
-          AND (worker_time.remark IS NULL OR worker_time.remark = '') 
-          AND (team.teamid in (${teamIds.map(() => "?").join(",")})) 
-      ORDER BY
-          projectname ASC,
-          teamname ASC,
-          datein ASC,
-          clockin ASC`);
 
       const rows = await awaitDb.all(
         `SELECT
@@ -497,11 +484,42 @@ router.post(
             clockin ASC`,
         [dateParam, dateParam, ...teamIds]
       );
-      console.log(rows);
+
+      if (req.body.whatsapp == "true") {
+        const groupByArrary = whatsappVersion(rows)
+        return res.json(groupByArrary)
+      }
+
       res.json(rows);
     }
   }
 );
+
+
+function whatsappVersion(rows) {
+  return Enumerable.from(rows)
+    .groupBy(
+      x => {
+        return {
+          projectname: x.projectname,
+          datein: x.datein,
+          clockin: x.clockin,
+          dateout: x.dateout,
+          clockout: x.clockout
+        };
+      },
+      // "{ datein: $.datein,  clockin: $.clockin,  dateout: $.dateout,  clockout: $.clockout }",
+      "",
+      (key, items) => {
+        return {
+          key: `${key.projectname}: ${key.datein} ${key.clockin} - ${key.dateout} ${key.clockout}`,
+          items: items.toArray()
+        }
+      },
+      (key) => (key.projectname + ':' + key.datein + ':' + key.clockin + ':' + key.dateout + ':' + key.clockout)
+    )
+    .toArray();
+}
 
 router.get("/api/user1", ensureLoggedIn(), function (req, res, next) {
   //console.log(req.user)
